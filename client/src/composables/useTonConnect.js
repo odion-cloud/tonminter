@@ -9,8 +9,22 @@ const connected = ref(false)
 // Initialize TonConnect
 const initTonConnect = () => {
   if (!tonConnectUI.value) {
+    // Check if we're in a browser environment
+    if (typeof window === 'undefined') {
+      console.warn('TON Connect: Not in browser environment, skipping initialization');
+      return;
+    }
+    
+    // Check if button element exists, if not create it
+    let buttonRoot = document.getElementById('ton-connect-button');
+    if (!buttonRoot) {
+      buttonRoot = document.createElement('div');
+      buttonRoot.id = 'ton-connect-button';
+      document.body.appendChild(buttonRoot);
+    }
+    
     tonConnectUI.value = new TonConnectUI({
-      manifestUrl: window.location.origin + '/tonconnect-manifest.json',
+      manifestUrl: '/tonconnect-manifest.json',
       buttonRootId: 'ton-connect-button'
     })
 
