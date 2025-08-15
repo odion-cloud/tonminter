@@ -24,7 +24,7 @@ const initTonConnect = () => {
     }
     
     tonConnectUI.value = new TonConnectUI({
-      manifestUrl: '/tonconnect-manifest.json',
+      manifestUrl: window.location.origin + '/tonconnect-manifest.json',
       buttonRootId: 'ton-connect-button'
     })
 
