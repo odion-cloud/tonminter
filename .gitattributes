@@ -1,0 +1,18 @@
+# Set default behavior for all files
+* text=auto
+
+# Ensure these files have LF line endings
+*.js text eol=lf
+*.vue text eol=lf
+*.css text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.ts text eol=lf
+
+# Ensure these files are treated as binary and not modified
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary 
