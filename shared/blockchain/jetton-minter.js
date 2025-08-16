@@ -30,6 +30,18 @@ export const jettonOnChainMetadataSpec = {
   symbol: "utf8",
   image_data: undefined,
   uri: "ascii",
+  // Transaction fee configuration
+  transaction_fee_percentage: "utf8",
+  transaction_fee_buyback_percentage: "utf8",
+  transaction_fee_treasury_percentage: "utf8",
+  transaction_fee_distribution_type: "utf8",
+  // Deflationary mechanism configuration
+  deflationary_trigger_type: "utf8",
+  deflationary_threshold_amount: "utf8",
+  deflationary_time_period: "utf8",
+  deflationary_max_buyback_per_tx: "utf8",
+  deflationary_enable_auto_buyback: "utf8",
+  deflationary_enable_burn_on_buyback: "utf8"
 };
 
 const sha256 = (str) => {

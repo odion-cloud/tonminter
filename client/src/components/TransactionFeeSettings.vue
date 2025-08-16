@@ -9,7 +9,7 @@
       <!-- Left Column -->
       <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-6 md:mb-0">
         <div class="pt-6 px-6 pb-6">
-          <div class="mb-4">
+          <div v-if="form.distributionType !== 'none'" class="mb-4">
             <label for="feePercentage" class="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
               Transaction Fee Percentage
             </label>
@@ -32,6 +32,13 @@
               Applied to every token transfer
             </p>
           </div>
+          <div v-else class="mb-4">
+            <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+              <p class="text-sm text-gray-600 dark:text-gray-400">
+                Transaction fees are disabled. No fees will be applied to token transfers.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
       
@@ -43,6 +50,19 @@
               Fee Distribution
             </label>
             <div class="mt-2 space-y-4">
+              <div class="flex items-center">
+                <input
+                  id="fee-none"
+                  v-model="form.distributionType"
+                  value="none"
+                  @change="updateAndValidate"
+                  type="radio"
+                  class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600"
+                />
+                <label for="fee-none" class="ml-3 text-sm font-medium text-gray-900 dark:text-gray-100">
+                  None (No Transaction Fees)
+                </label>
+              </div>
               <div class="flex items-center">
                 <input
                   id="fee-default"

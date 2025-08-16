@@ -1,45 +1,51 @@
 <template>
-  <div class="not-found">
-    <div class="container">
-      <div class="row justify-content-center">
-        <div class="col-md-6 text-center">
-          <div class="card">
-            <div class="card-body">
-              <div class="mb-4">
-                <i class="bi bi-exclamation-triangle display-1 text-warning"></i>
-              </div>
-              <h1 class="display-4 mb-3">404</h1>
-              <h2 class="mb-3">Page Not Found</h2>
-              <p class="lead mb-4">
+  <div class="min-h-screen bg-gray-50 dark:bg-slate-900">
+    <Header />
+    <div class="flex items-center justify-center" style="min-height: calc(100vh - 64px);">
+    <div class="max-w-md mx-auto text-center">
+      <div class="mb-8">
+        <div class="text-6xl font-bold text-gray-300 dark:text-gray-600 mb-4">404</div>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-4">Page Not Found</h1>
+        <p class="text-gray-600 dark:text-gray-400 mb-8">
                 The page you're looking for doesn't exist or has been moved.
               </p>
-              <div class="d-grid gap-2 d-md-block">
-                <router-link to="/" class="btn btn-primary">
-                  <i class="bi bi-house me-1"></i>
-                  Go Home
-                </router-link>
-                <button class="btn btn-outline-secondary" @click="goBack">
-                  <i class="bi bi-arrow-left me-1"></i>
+      </div>
+      
+      <div class="space-y-4">
+        <button 
+          @click="$router.push('/')"
+          class="w-full bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-md font-medium transition-colors"
+        >
+          Go to Home
+        </button>
+        
+        <button 
+          @click="$router.go(-1)"
+          class="w-full bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-md font-medium transition-colors"
+        >
                   Go Back
                 </button>
               </div>
-            </div>
-          </div>
+      
+      <div class="mt-8 text-sm text-gray-500 dark:text-gray-400">
+        <p>If you believe this is an error, please check the URL and try again.</p>
         </div>
       </div>
     </div>
   </div>
 </template>
 
-<script>
-export default {
-  name: 'NotFound',
-  methods: {
-    goBack() {
-      window.history.back()
-    }
-  }
-}
+<script setup>
+import { onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import Header from '@/components/Header.vue'
+
+const router = useRouter()
+
+onMounted(() => {
+  // Log the attempted route for debugging
+  console.warn('404 - Page not found:', router.currentRoute.value.fullPath)
+})
 </script>
 
 <style scoped>

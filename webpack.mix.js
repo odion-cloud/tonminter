@@ -39,7 +39,7 @@ mix.webpackConfig({
       __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: JSON.stringify(true),
     }),
   ],
-});
+}).disableNotifications();
 
 if (!mix.inProduction()) {
   mix.sourceMaps();

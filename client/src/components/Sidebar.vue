@@ -34,6 +34,17 @@
           <p class="mt-2">Deployment requires at least 0.25 TON for fees.</p>
         </div>
         
+        <!-- My Tokens Navigation -->
+        <div v-if="walletStore.isConnected" class="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+          <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">My Tokens</h4>
+          <button 
+            @click="viewMyTokens"
+            class="w-full bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+          >
+            View My Tokens
+          </button>
+        </div>
+        
         <div v-if="activeNetwork === 'testnet'" class="mt-4 text-xs text-blue-600 dark:text-blue-400">
           Testnet tokens can be obtained from the 
           <a 
@@ -52,6 +63,8 @@
 
 <script>
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useWalletStore } from '@/stores/wallet'
 import { Network as NetworkIcon } from 'lucide-vue-next'
 
 export default {
@@ -67,6 +80,8 @@ export default {
   },
   emits: ['networkChange'],
   setup(props, { emit }) {
+    const router = useRouter()
+    const walletStore = useWalletStore()
     const networkBadgeClass = computed(() => {
       switch (props.activeNetwork) {
         case 'mainnet':
@@ -92,11 +107,23 @@ export default {
     const handleNetworkChange = (event) => {
       emit('networkChange', event.target.value)
     }
+
+    const viewMyTokens = () => {
+      try {
+        // For now, we'll create a simple page to list user's tokens
+        // In a real implementation, you'd fetch tokens from the blockchain
+        router.push('/my-tokens')
+      } catch (error) {
+        console.error('Navigation error:', error)
+      }
+    }
     
     return {
       networkBadgeClass,
       networkDisplayName,
-      handleNetworkChange
+      handleNetworkChange,
+      viewMyTokens,
+      walletStore
     }
   }
 }

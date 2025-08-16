@@ -1,5 +1,6 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { TonConnectUI } from '@tonconnect/ui'
+import { toUserFriendlyAddress } from '@tonconnect/sdk'
 
 // Global state
 const tonConnectUI = ref(null)
@@ -15,17 +16,9 @@ const initTonConnect = () => {
       return;
     }
     
-    // Check if button element exists, if not create it
-    let buttonRoot = document.getElementById('ton-connect-button');
-    if (!buttonRoot) {
-      buttonRoot = document.createElement('div');
-      buttonRoot.id = 'ton-connect-button';
-      document.body.appendChild(buttonRoot);
-    }
-    
     tonConnectUI.value = new TonConnectUI({
-      manifestUrl: window.location.origin + '/tonconnect-manifest.json',
-      buttonRootId: 'ton-connect-button'
+      // manifestUrl: window.location.origin + '/tonconnect-manifest.json',
+      manifestUrl: 'https://app.viewmynte.com/tonconnect-manifest.json'
     })
 
     // Listen for wallet changes
@@ -39,7 +32,11 @@ const initTonConnect = () => {
 export function useTonConnect() {
   // Computed properties
   const address = computed(() => {
-    return wallet.value?.account?.address || null
+    const rawAddress = wallet.value?.account?.address || null
+    if (rawAddress) {
+      return toUserFriendlyAddress(rawAddress)
+    }
+    return null
   })
 
   const isConnected = computed(() => connected.value)
@@ -49,7 +46,10 @@ export function useTonConnect() {
     if (!tonConnectUI.value) {
       initTonConnect()
     }
-    await tonConnectUI.value.connectWallet()
+    
+    if (!tonConnectUI.value.connected) {
+      await tonConnectUI.value.openModal()
+    }
   }
 
   const disconnect = async () => {
@@ -59,15 +59,37 @@ export function useTonConnect() {
   }
 
   const sendTransaction = async (transaction) => {
-    if (!tonConnectUI.value || !connected.value) {
-      throw new Error('Wallet not connected')
+    if (!tonConnectUI.value) {
+      throw new Error('TON Connect UI not initialized. Please refresh the page and try again.')
     }
+    
+    if (!connected.value) {
+      throw new Error('Wallet not connected. Please connect your wallet first.')
+    }
+
+    if (typeof tonConnectUI.value.sendTransaction !== 'function') {
+      throw new Error('TON Connect UI sendTransaction method not available. Please reconnect your wallet.')
+    }
+
     return await tonConnectUI.value.sendTransaction(transaction)
   }
 
   const getShortAddress = () => {
+    console.log('address.value', address.value)
     if (!address.value) return ''
+    
+    // For TON addresses (UQ, EQ, 0Q), show first 4 and last 4 characters
+    if (address.value.startsWith('UQ') || address.value.startsWith('EQ') || address.value.startsWith('0Q')) {
+      return address.value.slice(0, 4) + '...' + address.value.slice(-4)
+    }
+    
+    // For raw addresses, show first 6 and last 4 characters
     return address.value.slice(0, 6) + '...' + address.value.slice(-4)
+  }
+
+  // Get raw address for internal use (contract deployment, etc.)
+  const getRawAddress = () => {
+    return wallet.value?.account?.address || null
   }
 
   // Initialize on mount
@@ -78,7 +100,13 @@ export function useTonConnect() {
   // Cleanup on unmount
   onUnmounted(() => {
     if (tonConnectUI.value) {
-      tonConnectUI.value.removeAllListeners()
+      try {
+        // TON Connect UI doesn't have removeAllListeners method
+        // Just set to null to allow garbage collection
+        tonConnectUI.value = null
+      } catch (error) {
+        console.warn('Error during TON Connect cleanup:', error)
+      }
     }
   })
 
@@ -93,6 +121,12 @@ export function useTonConnect() {
     connect,
     disconnect,
     sendTransaction,
-    getShortAddress
+    getShortAddress,
+    getRawAddress,
+    
+    // Utility methods
+    isReady: computed(() => {
+      return tonConnectUI.value && typeof tonConnectUI.value.sendTransaction === 'function'
+    })
   }
 } 

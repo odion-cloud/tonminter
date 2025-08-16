@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Home from '@/pages/Home.vue'
+import JettonManagement from '@/pages/JettonManagement.vue'
+import MyTokens from '@/pages/MyTokens.vue'
 import NotFound from '@/pages/NotFound.vue'
 
 const routes = [
@@ -9,7 +11,17 @@ const routes = [
     component: Home
   },
   {
-    path: '/:pathMatch(.*)*',
+    path: '/jetton/:address',
+    name: 'JettonManagement',
+    component: JettonManagement
+  },
+  {
+    path: '/my-tokens',
+    name: 'MyTokens',
+    component: MyTokens
+  },
+  {
+    path: '/:catchAll(.*)',
     name: 'NotFound',
     component: NotFound
   }

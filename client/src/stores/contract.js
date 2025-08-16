@@ -12,7 +12,7 @@ export const useContractStore = defineStore('contract', () => {
   const tokenConfig = ref({
     name: '',
     symbol: '',
-    decimals: 9,
+      decimals: 9,
     totalSupply: 0,
     initialPrice: 0,
     imageUrl: '',
@@ -20,20 +20,20 @@ export const useContractStore = defineStore('contract', () => {
   })
 
   const transactionFeeConfig = ref({
-    feePercentage: 2,
-    distributionType: 'default',
-    buybackPercentage: 50,
-    treasuryPercentage: 50
+      feePercentage: 2,
+    distributionType: 'none',
+      buybackPercentage: 50,
+      treasuryPercentage: 50
   })
 
   const buybackConfig = ref({
-    triggerType: 'threshold',
+    triggerType: 'none',
     thresholdAmount: 1000,
     timePeriod: 'daily',
     maxBuybackPerTx: 100
   })
 
-  const activeNetwork = ref(getNetwork())
+  const activeNetwork = ref('testnet')
   const isCompiling = ref(false)
   const isTesting = ref(false)
   const isDeploying = ref(false)
@@ -52,7 +52,7 @@ export const useContractStore = defineStore('contract', () => {
   })
 
   const deploymentConfig = computed(() => ({
-    owner: walletStore.address ? Address.parse(walletStore.address) : null,
+    owner: walletStore.getRawAddress() ? Address.parse(walletStore.getRawAddress()) : null,
     amountToMint: new BN(tokenConfig.value.totalSupply).mul(new BN(10).pow(new BN(tokenConfig.value.decimals))),
     onchainMetaData: {
       name: tokenConfig.value.name,
@@ -60,6 +60,22 @@ export const useContractStore = defineStore('contract', () => {
       description: tokenConfig.value.description || '',
       decimals: tokenConfig.value.decimals.toString(),
       image: tokenConfig.value.imageUrl || ''
+    },
+    // Include transaction fee configuration (only if not "none")
+    transactionFee: transactionFeeConfig.value.distributionType === 'none' ? null : {
+      feePercentage: transactionFeeConfig.value.feePercentage,
+      distributionType: transactionFeeConfig.value.distributionType,
+      buybackPercentage: transactionFeeConfig.value.buybackPercentage,
+      treasuryPercentage: transactionFeeConfig.value.treasuryPercentage
+    },
+    // Include deflationary mechanism configuration (only if not "none")
+    deflationary: buybackConfig.value.triggerType === 'none' ? null : {
+      triggerType: buybackConfig.value.triggerType,
+      thresholdAmount: buybackConfig.value.thresholdAmount,
+      timePeriod: buybackConfig.value.timePeriod,
+      maxBuybackPerTx: buybackConfig.value.maxBuybackPerTx,
+      enableAutoBuyback: true,
+      enableBurnOnBuyback: true
     }
   }))
 
@@ -93,7 +109,13 @@ export const useContractStore = defineStore('contract', () => {
       error.value = null
 
       if (!isConfigValid.value) {
-        throw new Error('Invalid token configuration')
+        // Provide detailed error message
+        const issues = []
+        if (!tokenConfig.value.name) issues.push('Token name is required')
+        if (!tokenConfig.value.symbol) issues.push('Token symbol is required')
+        if (tokenConfig.value.totalSupply <= 0) issues.push('Total supply must be greater than 0')
+        
+        throw new Error(`Invalid token configuration: ${issues.join(', ')}`)
       }
 
       // For real compilation, we'd need to generate and compile the FunC contract
@@ -165,7 +187,7 @@ export const useContractStore = defineStore('contract', () => {
     }
   }
 
-  const deployContract = async () => {
+  const deployContract = async (retryCount = 0) => {
     try {
       isDeploying.value = true
       error.value = null
@@ -184,17 +206,59 @@ export const useContractStore = defineStore('contract', () => {
         throw new Error('Invalid wallet address')
       }
 
+      // Use raw address for deployment (TON Connect format)
+      const rawAddress = walletStore.getRawAddress()
+      if (!rawAddress) {
+        throw new Error('Wallet address not available')
+      }
+
       deployState.value = JettonDeployState.AWAITING_MINTER_DEPLOY
+
+      // Check if TON Connect UI is available and ready
+      if (!walletStore.tonConnectUI) {
+        throw new Error('TON Connect UI not available. Please ensure wallet is connected.')
+      }
+
+      // Additional check to ensure TON Connect is ready
+      if (!walletStore.isReady) {
+        throw new Error('TON Connect UI is not ready. Please refresh the page and reconnect your wallet.')
+      }
 
       // Deploy using real blockchain
       const deployedAddress = await jettonDeployController.createJetton(
         deployConfig,
         walletStore.tonConnectUI,
-        walletStore.address
+        rawAddress,
+        activeNetwork.value
       )
 
       contractAddress.value = deployedAddress.toFriendly()
       deployState.value = JettonDeployState.DONE
+
+      // Store the deployed token in localStorage
+      const deployedToken = {
+        address: contractAddress.value,
+        network: activeNetwork.value,
+        totalSupply: tokenConfig.value.totalSupply,
+        metadata: {
+          name: tokenConfig.value.name,
+          symbol: tokenConfig.value.symbol,
+          description: tokenConfig.value.description || '',
+          image: tokenConfig.value.imageUrl || ''
+        },
+        deployedAt: new Date().toISOString(),
+        owner: walletStore.getRawAddress()
+      }
+
+      // Get existing tokens for this wallet
+      const walletAddress = walletStore.getRawAddress()
+      const existingTokens = JSON.parse(localStorage.getItem(`tokens_${walletAddress}`) || '[]')
+      
+      // Add new token to the list
+      existingTokens.push(deployedToken)
+      
+      // Store updated list
+      localStorage.setItem(`tokens_${walletAddress}`, JSON.stringify(existingTokens))
 
       deployResult.value = {
         success: true,
@@ -209,9 +273,37 @@ export const useContractStore = defineStore('contract', () => {
     } catch (err) {
       error.value = err.message
       deployState.value = JettonDeployState.NOT_STARTED
+      
+      // Provide more helpful error messages
+      let errorMessage = err.message
+      if (err.message.includes('TON Connect UI')) {
+        errorMessage = 'Wallet connection issue. Please refresh the page and reconnect your wallet before deploying.'
+      } else if (err.message.includes('sendTransaction')) {
+        errorMessage = 'Transaction failed. Please check your wallet connection and try again.'
+      } else if (err.message.includes('balance')) {
+        errorMessage = 'Insufficient balance. Please ensure your wallet has enough TON for deployment.'
+      }
+      
+      // Retry logic for certain errors
+      const maxRetries = 2
+      if (retryCount < maxRetries && (
+        err.message.includes('sendTransaction') || 
+        err.message.includes('TON Connect UI') ||
+        err.message.includes('Transaction failed')
+      )) {
+        console.log(`Deployment failed, retrying... (${retryCount + 1}/${maxRetries})`)
+        
+        // Wait a bit before retrying
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        
+        // Retry the deployment
+        return await deployContract(retryCount + 1)
+      }
+      
       deployResult.value = {
         success: false,
-        message: err.message
+        message: errorMessage,
+        originalError: err.message
       }
       throw err
     } finally {
@@ -228,10 +320,129 @@ export const useContractStore = defineStore('contract', () => {
       const parsedAddress = Address.parse(jettonAddress)
       const ownerAddress = walletStore.address ? Address.parse(walletStore.address) : Address.parse("EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c")
 
-      const details = await jettonDeployController.getJettonDetails(parsedAddress, ownerAddress)
+      const details = await jettonDeployController.getJettonDetails(parsedAddress, ownerAddress, activeNetwork.value)
       return details
     } catch (err) {
       console.error('Failed to get jetton details:', err)
+      throw err
+    }
+  }
+
+  const mintTokens = async (jettonAddress, amount) => {
+    try {
+      if (!walletStore.isConnected) {
+        throw new Error('Wallet not connected')
+      }
+
+      const parsedAddress = Address.parse(jettonAddress)
+      await jettonDeployController.mint(
+        walletStore.tonConnectUI,
+        parsedAddress,
+        new BN(amount).mul(new BN(10).pow(new BN(9))), // Convert to nano
+        walletStore.getRawAddress(),
+        activeNetwork.value
+      )
+    } catch (err) {
+      console.error('Failed to mint tokens:', err)
+      throw err
+    }
+  }
+
+  const updateMetadata = async (jettonAddress, metadata) => {
+    try {
+      if (!walletStore.isConnected) {
+        throw new Error('Wallet not connected')
+      }
+
+      const parsedAddress = Address.parse(jettonAddress)
+      await jettonDeployController.updateMetadata(
+        parsedAddress,
+        metadata,
+        walletStore.tonConnectUI,
+        walletStore.getRawAddress(),
+        activeNetwork.value
+      )
+    } catch (err) {
+      console.error('Failed to update metadata:', err)
+      throw err
+    }
+  }
+
+  const revokeOwnership = async (jettonAddress) => {
+    try {
+      if (!walletStore.isConnected) {
+        throw new Error('Wallet not connected')
+      }
+
+      const parsedAddress = Address.parse(jettonAddress)
+      await jettonDeployController.burnAdmin(
+        parsedAddress,
+        walletStore.tonConnectUI,
+        walletStore.getRawAddress(),
+        activeNetwork.value
+      )
+    } catch (err) {
+      console.error('Failed to revoke ownership:', err)
+      throw err
+    }
+  }
+
+  const transferTokens = async (jettonAddress, toAddress, amount) => {
+    try {
+      if (!walletStore.isConnected) {
+        throw new Error('Wallet not connected')
+      }
+
+      const parsedJettonAddress = Address.parse(jettonAddress)
+      const parsedToAddress = Address.parse(toAddress)
+      
+      // Get jetton wallet address for the connected wallet
+      const details = await getJettonDetails(jettonAddress)
+      const jettonWalletAddress = details.jettonWallet?.jWalletAddress
+
+      if (!jettonWalletAddress) {
+        throw new Error('Jetton wallet not found')
+      }
+
+      await jettonDeployController.transfer(
+        walletStore.tonConnectUI,
+        new BN(amount).mul(new BN(10).pow(new BN(9))), // Convert to nano
+        parsedToAddress,
+        walletStore.getRawAddress(),
+        jettonWalletAddress,
+        activeNetwork.value
+      )
+    } catch (err) {
+      console.error('Failed to transfer tokens:', err)
+      throw err
+    }
+  }
+
+  const burnTokens = async (jettonAddress, amount) => {
+    try {
+      if (!walletStore.isConnected) {
+        throw new Error('Wallet not connected')
+      }
+
+      const parsedJettonAddress = Address.parse(jettonAddress)
+      
+      // Get jetton wallet address for the connected wallet
+      const details = await getJettonDetails(jettonAddress)
+      const jettonWalletAddress = details.jettonWallet?.jWalletAddress
+
+      if (!jettonWalletAddress) {
+        throw new Error('Jetton wallet not found')
+      }
+
+      await jettonDeployController.burnJettons(
+        walletStore.tonConnectUI,
+        new BN(amount).mul(new BN(10).pow(new BN(9))), // Convert to nano
+        jettonWalletAddress,
+        walletStore.getRawAddress(),
+        activeNetwork.value
+      )
+    } catch (err) {
+      console.error('Failed to burn tokens:', err)
       throw err
     }
   }
@@ -269,11 +480,11 @@ export const useContractStore = defineStore('contract', () => {
     testResult,
     deployResult,
     error,
-
+    
     // Computed
     isConfigValid,
     deploymentConfig,
-
+    
     // Actions
     updateTokenConfig,
     updateTransactionFeeConfig,
@@ -283,6 +494,11 @@ export const useContractStore = defineStore('contract', () => {
     testContract,
     deployContract,
     getJettonDetails,
+    mintTokens,
+    updateMetadata,
+    revokeOwnership,
+    transferTokens,
+    burnTokens,
     resetState
   }
 }) 

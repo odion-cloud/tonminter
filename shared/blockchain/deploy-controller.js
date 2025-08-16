@@ -36,9 +36,14 @@ export const JettonDeployState = {
 };
 
 class JettonDeployController {
-  async createJetton(params, tonConnectUI, walletAddress) {
+  async createJetton(params, tonConnectUI, walletAddress, network = 'testnet') {
+    // Validate tonConnectUI
+    if (!tonConnectUI) {
+      throw new Error("TON Connect UI is not available. Please ensure wallet is connected.");
+    }
+
     const contractDeployer = new ContractDeployer();
-    const tc = await getTonClient();
+    const tc = await getTonClient(network);
 
     // Check balance
     const balance = await tc.getBalance(params.owner);
@@ -72,17 +77,46 @@ class JettonDeployController {
   createDeployParams(params, offchainUri) {
     const queryId = parseInt(process.env.VUE_APP_DEPLOY_QUERY_ID || "0");
 
+    // Include transaction fee and deflationary settings in metadata
+    const enhancedMetadata = {
+      ...params.onchainMetaData
+    };
+
+    // Add transaction fee configuration to metadata (only if not null)
+    if (params.transactionFee) {
+      enhancedMetadata.transaction_fee_percentage = params.transactionFee.feePercentage?.toString() || "2";
+      enhancedMetadata.transaction_fee_buyback_percentage = params.transactionFee.buybackPercentage?.toString() || "50";
+      enhancedMetadata.transaction_fee_treasury_percentage = params.transactionFee.treasuryPercentage?.toString() || "50";
+      enhancedMetadata.transaction_fee_distribution_type = params.transactionFee.distributionType || "default";
+    } else {
+      // Set to "none" when transaction fees are disabled
+      enhancedMetadata.transaction_fee_distribution_type = "none";
+    }
+
+    // Add deflationary mechanism configuration to metadata (only if not null)
+    if (params.deflationary) {
+      enhancedMetadata.deflationary_trigger_type = params.deflationary.triggerType || "threshold";
+      enhancedMetadata.deflationary_threshold_amount = params.deflationary.thresholdAmount?.toString() || "10000";
+      enhancedMetadata.deflationary_time_period = params.deflationary.timePeriod || "weekly";
+      enhancedMetadata.deflationary_max_buyback_per_tx = params.deflationary.maxBuybackPerTx?.toString() || "5000";
+      enhancedMetadata.deflationary_enable_auto_buyback = params.deflationary.enableAutoBuyback?.toString() || "true";
+      enhancedMetadata.deflationary_enable_burn_on_buyback = params.deflationary.enableBurnOnBuyback?.toString() || "true";
+    } else {
+      // Set to "none" when deflationary mechanism is disabled
+      enhancedMetadata.deflationary_trigger_type = "none";
+    }
+
     return {
       code: JETTON_MINTER_CODE,
-      data: initData(params.owner, params.onchainMetaData, offchainUri),
+      data: initData(params.owner, enhancedMetadata, offchainUri),
       deployer: params.owner,
       value: JETTON_DEPLOY_GAS,
       message: mintBody(params.owner, params.amountToMint, toNano(0.2), queryId),
     };
   }
 
-  async burnAdmin(contractAddress, tonConnectUI, walletAddress) {
-    const tc = await getTonClient();
+  async burnAdmin(contractAddress, tonConnectUI, walletAddress, network = 'testnet') {
+    const tc = await getTonClient(network);
     const waiter = await waitForSeqno(
       tc.openWalletFromAddress({
         source: Address.parse(walletAddress),
@@ -105,8 +139,8 @@ class JettonDeployController {
     await waiter();
   }
 
-  async mint(tonConnectUI, jettonMaster, amount, walletAddress) {
-    const tc = await getTonClient();
+  async mint(tonConnectUI, jettonMaster, amount, walletAddress, network = 'testnet') {
+    const tc = await getTonClient(network);
     const waiter = await waitForSeqno(
       tc.openWalletFromAddress({
         source: Address.parse(walletAddress),
@@ -131,8 +165,8 @@ class JettonDeployController {
     await waiter();
   }
 
-  async transfer(tonConnectUI, amount, toAddress, fromAddress, ownerJettonWallet) {
-    const tc = await getTonClient();
+  async transfer(tonConnectUI, amount, toAddress, fromAddress, ownerJettonWallet, network = 'testnet') {
+    const tc = await getTonClient(network);
     const waiter = await waitForSeqno(
       tc.openWalletFromAddress({
         source: Address.parse(fromAddress),
@@ -157,8 +191,8 @@ class JettonDeployController {
     await waiter();
   }
 
-  async burnJettons(tonConnectUI, amount, jettonAddress, walletAddress) {
-    const tc = await getTonClient();
+  async burnJettons(tonConnectUI, amount, jettonAddress, walletAddress, network = 'testnet') {
+    const tc = await getTonClient(network);
     const waiter = await waitForSeqno(
       tc.openWalletFromAddress({
         source: Address.parse(walletAddress),
@@ -181,8 +215,8 @@ class JettonDeployController {
     await waiter();
   }
 
-  async getJettonDetails(contractAddr, owner) {
-    const tc = await getTonClient();
+  async getJettonDetails(contractAddr, owner, network = 'testnet') {
+    const tc = await getTonClient(network);
     
     const minter = await makeGetCall(
       contractAddr,
@@ -229,8 +263,8 @@ class JettonDeployController {
     };
   }
 
-  async updateMetadata(contractAddress, data, tonConnectUI, walletAddress) {
-    const tc = await getTonClient();
+  async updateMetadata(contractAddress, data, tonConnectUI, walletAddress, network = 'testnet') {
+    const tc = await getTonClient(network);
     const waiter = await waitForSeqno(
       tc.openWalletFromAddress({
         source: Address.parse(walletAddress),

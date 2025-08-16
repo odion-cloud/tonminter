@@ -4,30 +4,29 @@ import { getHttpEndpoint } from "@orbs-network/ton-access";
 let clientPromise = null;
 let endpointPromise = null;
 
-export function getNetwork() {
-  // Check for testnet in URL params or environment
-  const urlParams = new URLSearchParams(window.location.search);
-  return urlParams.has("testnet") ? "testnet" : "mainnet";
+export function getNetwork(network = 'testnet') {
+  // Accept network parameter instead of reading from URL
+  return network || 'testnet';
 }
 
-export async function getEndpoint() {
+export async function getEndpoint(network = 'testnet') {
   if (!endpointPromise) {
     endpointPromise = getHttpEndpoint({
-      network: getNetwork(),
+      network: getNetwork(network),
     });
   }
   return endpointPromise;
 }
 
-export async function getTonClient() {
+export async function getTonClient(network = 'testnet') {
   if (!clientPromise) {
-    clientPromise = createTonClient();
+    clientPromise = createTonClient(network);
   }
   return clientPromise;
 }
 
-async function createTonClient() {
-  const endpoint = await getEndpoint();
+async function createTonClient(network = 'testnet') {
+  const endpoint = await getEndpoint(network);
   return new TonClient({
     endpoint,
   });

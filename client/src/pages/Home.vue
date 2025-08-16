@@ -144,6 +144,7 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
+import { useRouter } from 'vue-router'
 import Header from '@/components/Header.vue'
 import Sidebar from '@/components/Sidebar.vue'
 import TokenConfiguration from '@/components/TokenConfiguration.vue'
@@ -154,6 +155,7 @@ import ActionCards from '@/components/ActionCards.vue'
 import { useContractStore } from '@/stores/contract'
 
 const contractStore = useContractStore()
+const router = useRouter()
 
 const activeTab = ref('tokenConfig')
 const activeNetwork = ref('testnet')
@@ -188,6 +190,15 @@ const contractConfig = reactive({
     maxBuybackPerTx: 5000
   }
 })
+
+// Initialize contract store with default values
+try {
+  contractStore.updateTokenConfig(contractConfig.token)
+  contractStore.updateTransactionFeeConfig(contractConfig.transactionFee)
+  contractStore.updateBuybackConfig(contractConfig.buyback)
+} catch (error) {
+  console.error('Failed to initialize contract store:', error)
+}
 
 const compileResult = ref(null)
 const testResult = ref(null)
@@ -310,20 +321,26 @@ const setActiveNetwork = (network) => {
 
 const updateTokenConfig = (config) => {
   Object.assign(contractConfig.token, config)
+  // Sync with contract store
+  contractStore.updateTokenConfig(config)
 }
 
 const updateTransactionFeeConfig = (config) => {
   Object.assign(contractConfig.transactionFee, config)
+  // Sync with contract store
+  contractStore.updateTransactionFeeConfig(config)
 }
 
 const updateBuybackConfig = (config) => {
   Object.assign(contractConfig.buyback, config)
+  // Sync with contract store
+  contractStore.updateBuybackConfig(config)
 }
 
 // Action handlers
 const handleCompile = async () => {
   try {
-    compileResult.value = await contractStore.compileContract(contractConfig)
+    compileResult.value = await contractStore.compileContract()
   } catch (error) {
     console.error('Compilation failed:', error)
     compileResult.value = {
@@ -335,7 +352,7 @@ const handleCompile = async () => {
 
 const handleRunTests = async () => {
   try {
-    testResult.value = await contractStore.testContract(contractConfig)
+    testResult.value = await contractStore.testContract()
   } catch (error) {
     console.error('Testing failed:', error)
     testResult.value = {
@@ -351,10 +368,13 @@ const handleRunTests = async () => {
 
 const handleDeploy = async () => {
   try {
-    deployResult.value = await contractStore.deployContract({
-      ...contractConfig,
-      network: activeNetwork.value
-    })
+    const result = await contractStore.deployContract()
+    deployResult.value = result
+    
+    // Redirect to jetton management page on successful deployment
+    if (result.success && result.address) {
+      router.push(`/jetton/${result.address}`)
+    }
   } catch (error) {
     console.error('Deployment failed:', error)
     deployResult.value = {

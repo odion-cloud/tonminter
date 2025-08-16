@@ -15,6 +15,16 @@ export class ContractDeployer {
     new StateInit({ data: params.data, code: params.code }).writeTo(cell);
     
     if (!params.dryRun) {
+      // Validate tonConnectUI
+      if (!tonConnectUI) {
+        throw new Error('TON Connect UI is not available. Please ensure wallet is connected.');
+      }
+
+      // Check if sendTransaction method exists
+      if (typeof tonConnectUI.sendTransaction !== 'function') {
+        throw new Error('TON Connect UI sendTransaction method is not available. Please reconnect your wallet.');
+      }
+
       const transaction = {
         validUntil: Date.now() + 5 * 60 * 1000,
         messages: [
@@ -27,7 +37,12 @@ export class ContractDeployer {
         ],
       };
 
-      await tonConnectUI.sendTransaction(transaction);
+      try {
+        await tonConnectUI.sendTransaction(transaction);
+      } catch (error) {
+        console.error('Transaction failed:', error);
+        throw new Error(`Deployment transaction failed: ${error.message || 'Unknown error'}`);
+      }
     }
 
     return contractAddr;

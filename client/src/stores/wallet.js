@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { useTonConnect } from '../composables/useTonConnect.js'
+import { useTonConnect } from '@/composables/useTonConnect'
+import { getTonApiClient } from '@shared/blockchain/ton-api'
+import { useContractStore } from './contract.js'
 
 export const useWalletStore = defineStore('wallet', () => {
   const { 
@@ -11,7 +13,8 @@ export const useWalletStore = defineStore('wallet', () => {
     connect: tonConnect,
     disconnect: tonDisconnect,
     sendTransaction,
-    getShortAddress 
+    getShortAddress,
+    getRawAddress
   } = useTonConnect()
 
   // Additional wallet state
@@ -56,6 +59,44 @@ export const useWalletStore = defineStore('wallet', () => {
     }
   }
 
+  // Payment wallet configuration
+  const getPaymentWalletAddress = () => {
+    // Replace this with your actual TON wallet address for receiving payments
+    return 'EQD4FPq-PRDieyQKkizFTRtSDyucUIqrj0v_zXJmqaDp6_0t'
+  }
+
+  const getCurrentNetwork = () => {
+    // Get network from contract store instead of URL
+    try {
+      const contractStore = useContractStore()
+      return contractStore.activeNetwork
+    } catch (error) {
+      console.warn('Could not get network from contract store, defaulting to testnet:', error)
+      return 'testnet'
+    }
+  }
+
+  // Fetch all Jetton data for a wallet address from blockchain
+  const fetchAllJettonData = async (walletAddress) => {
+    try {
+      console.log('Fetching Jetton data for wallet:', walletAddress)
+      
+      // Use the new TON API client
+      const network = getCurrentNetwork()
+      const tonApiClient = getTonApiClient(network)
+      
+      // Get all Jettons for the wallet using the API client
+      const jettons = await tonApiClient.getWalletJettons(walletAddress)
+      
+      console.log('Processed Jetton tokens:', jettons)
+      return jettons
+      
+    } catch (error) {
+      console.error('Failed to fetch Jetton data from blockchain:', error)
+      return []
+    }
+  }
+
   return {
     // State
     wallet,
@@ -71,6 +112,16 @@ export const useWalletStore = defineStore('wallet', () => {
     // Actions
     connect,
     disconnect,
-    sendTransaction: sendTx
+    sendTransaction: sendTx,
+
+    // Address methods
+    getRawAddress,
+
+    // Payment methods
+    getPaymentWalletAddress,
+    getCurrentNetwork,
+    
+    // Blockchain methods
+    fetchAllJettonData
   }
 }) 
