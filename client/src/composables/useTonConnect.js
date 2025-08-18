@@ -1,32 +1,59 @@
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+
+import { ref, computed } from 'vue'
 import { TonConnectUI } from '@tonconnect/ui'
 import { toUserFriendlyAddress } from '@tonconnect/sdk'
 
-// Global state
-const tonConnectUI = ref(null)
+// Global state - only one instance across the entire app
+let tonConnectUIInstance = null
 const wallet = ref(null)
 const connected = ref(false)
+const isInitialized = ref(false)
 
-// Initialize TonConnect
+// Initialize TonConnect only once
 const initTonConnect = () => {
-  if (!tonConnectUI.value) {
-    // Check if we're in a browser environment
-    if (typeof window === 'undefined') {
-      console.warn('TON Connect: Not in browser environment, skipping initialization');
-      return;
-    }
-    
-    tonConnectUI.value = new TonConnectUI({
+  // Prevent multiple initializations
+  if (tonConnectUIInstance || isInitialized.value) {
+    return tonConnectUIInstance
+  }
+
+  // Check if we're in a browser environment
+  if (typeof window === 'undefined') {
+    console.warn('TON Connect: Not in browser environment, skipping initialization')
+    return null
+  }
+  
+  try {
+    tonConnectUIInstance = new TonConnectUI({
       // manifestUrl: window.location.origin + '/tonconnect-manifest.json',
       manifestUrl: 'https://app.viewmynte.com/tonconnect-manifest.json'
     })
 
-    // Listen for wallet changes
-    tonConnectUI.value.onStatusChange((walletInfo) => {
+    // Listen for wallet changes - only set up listener once
+    tonConnectUIInstance.onStatusChange((walletInfo) => {
+      console.log('TON Connect status changed:', walletInfo)
       wallet.value = walletInfo
       connected.value = !!walletInfo
     })
+
+    // Check current connection status
+    if (tonConnectUIInstance.wallet) {
+      wallet.value = tonConnectUIInstance.wallet
+      connected.value = true
+    }
+
+    isInitialized.value = true
+    console.log('TON Connect UI initialized successfully')
+  } catch (error) {
+    console.error('Failed to initialize TON Connect UI:', error)
+    tonConnectUIInstance = null
   }
+
+  return tonConnectUIInstance
+}
+
+// Initialize immediately when module loads
+if (typeof window !== 'undefined') {
+  initTonConnect()
 }
 
 export function useTonConnect() {
@@ -41,25 +68,37 @@ export function useTonConnect() {
 
   const isConnected = computed(() => connected.value)
 
-  // Methods
-  const connect = async () => {
-    if (!tonConnectUI.value) {
+  const tonConnectUI = computed(() => {
+    // Always return the same instance
+    if (!tonConnectUIInstance && typeof window !== 'undefined') {
       initTonConnect()
     }
+    return tonConnectUIInstance
+  })
+
+  // Methods
+  const connect = async () => {
+    const ui = tonConnectUI.value
+    if (!ui) {
+      console.error('TON Connect UI not available')
+      throw new Error('TON Connect UI not available')
+    }
     
-    if (!tonConnectUI.value.connected) {
-      await tonConnectUI.value.openModal()
+    if (!ui.connected) {
+      await ui.openModal()
     }
   }
 
   const disconnect = async () => {
-    if (tonConnectUI.value) {
-      await tonConnectUI.value.disconnect()
+    const ui = tonConnectUI.value
+    if (ui) {
+      await ui.disconnect()
     }
   }
 
   const sendTransaction = async (transaction) => {
-    if (!tonConnectUI.value) {
+    const ui = tonConnectUI.value
+    if (!ui) {
       throw new Error('TON Connect UI not initialized. Please refresh the page and try again.')
     }
     
@@ -67,15 +106,14 @@ export function useTonConnect() {
       throw new Error('Wallet not connected. Please connect your wallet first.')
     }
 
-    if (typeof tonConnectUI.value.sendTransaction !== 'function') {
+    if (typeof ui.sendTransaction !== 'function') {
       throw new Error('TON Connect UI sendTransaction method not available. Please reconnect your wallet.')
     }
 
-    return await tonConnectUI.value.sendTransaction(transaction)
+    return await ui.sendTransaction(transaction)
   }
 
   const getShortAddress = () => {
-    console.log('address.value', address.value)
     if (!address.value) return ''
     
     // For TON addresses (UQ, EQ, 0Q), show first 4 and last 4 characters
@@ -92,30 +130,12 @@ export function useTonConnect() {
     return wallet.value?.account?.address || null
   }
 
-  // Initialize on mount
-  onMounted(() => {
-    initTonConnect()
-  })
-
-  // Cleanup on unmount
-  onUnmounted(() => {
-    if (tonConnectUI.value) {
-      try {
-        // TON Connect UI doesn't have removeAllListeners method
-        // Just set to null to allow garbage collection
-        tonConnectUI.value = null
-      } catch (error) {
-        console.warn('Error during TON Connect cleanup:', error)
-      }
-    }
-  })
-
   return {
     // State
     wallet: computed(() => wallet.value),
     address,
     isConnected,
-    tonConnectUI: computed(() => tonConnectUI.value),
+    tonConnectUI,
 
     // Methods
     connect,
@@ -126,7 +146,8 @@ export function useTonConnect() {
     
     // Utility methods
     isReady: computed(() => {
-      return tonConnectUI.value && typeof tonConnectUI.value.sendTransaction === 'function'
+      const ui = tonConnectUI.value
+      return ui && typeof ui.sendTransaction === 'function'
     })
   }
-} 
+}

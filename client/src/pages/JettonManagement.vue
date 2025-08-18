@@ -1,7 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gray-50 dark:bg-slate-900">
-    <Header />
-    
+  <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <!-- Loading State -->
       <div v-if="isLoading" class="flex justify-center items-center h-64">
@@ -221,7 +219,7 @@
           <!-- Wallet Information -->
           <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Wallet Information</h3>
-            
+
             <div v-if="!walletStore.isConnected" class="text-center py-8">
               <p class="text-gray-500 dark:text-gray-400 mb-4">Connect your wallet to view balance</p>
               <button 
@@ -417,13 +415,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useContractStore } from '@/stores/contract'
 import { useWalletStore } from '@/stores/wallet'
 import { getTonApiClient } from '@shared/blockchain/ton-api'
 import { isValidAddress } from '@shared/blockchain/blockchain-utils'
-import Header from '@/components/Header.vue'
 import MintModal from '@/components/modals/MintModal.vue'
 import UpdateMetadataModal from '@/components/modals/UpdateMetadataModal.vue'
 import RevokeModal from '@/components/modals/RevokeModal.vue'
@@ -473,41 +470,41 @@ const deflationaryConfig = ref({
 // Computed
 const isAdmin = computed(() => {
   if (!jettonDetails.value?.minter?.admin || !walletStore.getRawAddress()) return false
-  
+
   // Get admin address as string (following minter project approach)
   const adminAddress = jettonDetails.value.minter.admin
   const walletRawAddress = walletStore.getRawAddress()
-  
+
   if (adminAddress && walletRawAddress) {
     try {
       // Convert admin address to string if it's an Address object
       const adminAddressStr = typeof adminAddress === 'object' && adminAddress.toFriendly 
         ? adminAddress.toFriendly({ urlSafe: true, bounceable: false })
         : adminAddress.toString()
-      
+
       // Compare with raw wallet address
       if (adminAddressStr === walletRawAddress) return true
-      
+
       // Also try comparing with user-friendly wallet address
       if (adminAddressStr === walletStore.address) return true
-      
+
       return false
     } catch (error) {
       console.warn('Error comparing addresses:', error)
       return false
     }
   }
-  
+
   return false
 })
 
 const adminRevokedOwnership = computed(() => {
   if (!jettonDetails.value?.minter?.admin) return false
-  
+
   // Check if admin address is empty or zero address
   const adminAddress = jettonDetails.value.minter.admin
   let adminAddressStr = ''
-  
+
   // Handle Address objects (from TON library)
   if (typeof adminAddress === 'object' && adminAddress.toFriendly) {
     try {
@@ -521,7 +518,7 @@ const adminRevokedOwnership = computed(() => {
   } else {
     return false
   }
-  
+
   return !adminAddressStr || 
          adminAddressStr === 'EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c' || 
          adminAddressStr === '0:0000000000000000000000000000000000000000000000000000000000000000'
@@ -533,23 +530,23 @@ const loadJettonDetails = async () => {
     error.value = 'No jetton address provided'
     return
   }
-  
+
   try {
     isLoading.value = true
     error.value = null
-    
+
     // Validate address format
     if (!isValidAddress(jettonAddress.value)) {
       throw new Error('Invalid TON address format')
     }
-    
+
     const details = await contractStore.getJettonDetails(jettonAddress.value)
     jettonDetails.value = details
     console.log(details.minter,details.jettonWallet)
     // Extract transaction fee and deflationary configuration from metadata
     if (details?.minter?.metadata) {
       const metadata = details.minter.metadata
-      
+
       // Load transaction fee configuration
       const feeDistributionType = metadata.transaction_fee_distribution_type || 'default'
       transactionFeeConfig.value = {
@@ -558,7 +555,7 @@ const loadJettonDetails = async () => {
         treasuryPercentage: feeDistributionType === 'none' ? 0 : (parseInt(metadata.transaction_fee_treasury_percentage) || 50),
         distributionType: feeDistributionType
       }
-      
+
       // Load deflationary mechanism configuration
       const deflationaryTriggerType = metadata.deflationary_trigger_type || 'threshold'
       deflationaryConfig.value = {
@@ -587,7 +584,7 @@ const loadJettonDetails = async () => {
 
 const isValidTonAddress = (address) => {
   if (!address) return false
-  
+
   // Use the blockchain-utils isValidAddress method which handles both raw and friendly addresses
   return isValidAddress(address)
 }
@@ -595,9 +592,9 @@ const isValidTonAddress = (address) => {
 const formatAddress = (address) => {
   // Check if address exists
   if (!address) return 'N/A'
-  
+
   let addressStr = ''
-  
+
   // Handle Address objects (from TON library)
   if (typeof address === 'object' && address.toFriendly) {
     try {
@@ -611,23 +608,23 @@ const formatAddress = (address) => {
   } else {
     return 'N/A'
   }
-  
+
   // Check if it's a zero address (revoked ownership)
   if (addressStr === 'EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c' || 
       addressStr === '0:0000000000000000000000000000000000000000000000000000000000000000') {
     return 'Empty address (Ownership revoked)'
   }
-  
+
   // Ensure the address has enough characters to slice
   if (addressStr.length < 14) return addressStr
-  
+
   return addressStr.slice(0, 8) + '...' + addressStr.slice(-6)
 }
 
 const formatNumber = (number) => {
   // Check if number exists and can be converted to a number
   if (number === null || number === undefined || isNaN(Number(number))) return '0'
-  
+
   try {
     return new Intl.NumberFormat().format(Number(number).toString())
   } catch (error) {
@@ -653,21 +650,21 @@ const copyToClipboard = async (text) => {
       console.warn('Invalid text for clipboard:', text)
       return
     }
-    
+
     // Ensure text is not empty
     if (!textToCopy) {
       console.warn('Empty text for clipboard')
       return
     }
-    
+
     await navigator.clipboard.writeText(textToCopy)
-    
+
     // Show a simple notification
     const notification = document.createElement('div')
     notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-md shadow-lg z-50'
     notification.textContent = 'Address copied to clipboard!'
     document.body.appendChild(notification)
-    
+
     // Remove notification after 3 seconds
     setTimeout(() => {
       if (notification.parentNode) {
@@ -676,13 +673,13 @@ const copyToClipboard = async (text) => {
     }, 3000)
   } catch (err) {
     console.error('Failed to copy:', err)
-    
+
     // Show error notification
     const notification = document.createElement('div')
     notification.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-md shadow-lg z-50'
     notification.textContent = 'Failed to copy address'
     document.body.appendChild(notification)
-    
+
     // Remove notification after 3 seconds
     setTimeout(() => {
       if (notification.parentNode) {
@@ -742,16 +739,16 @@ const handleUpdateTransactionFee = async (config) => {
   try {
     // Update the local config
     transactionFeeConfig.value = { ...transactionFeeConfig.value, ...config }
-    
+
     // In a real implementation, you would call the blockchain to update these settings
     // await contractStore.updateTransactionFee(jettonAddress.value, config)
-    
+
     // For now, just show a success message
     const notification = document.createElement('div')
     notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-md shadow-lg z-50'
     notification.textContent = 'Transaction fee configuration updated!'
     document.body.appendChild(notification)
-    
+
     setTimeout(() => {
       if (notification.parentNode) {
         notification.parentNode.removeChild(notification)
@@ -766,16 +763,16 @@ const handleUpdateDeflationary = async (config) => {
   try {
     // Update the local config
     deflationaryConfig.value = { ...deflationaryConfig.value, ...config }
-    
+
     // In a real implementation, you would call the blockchain to update these settings
     // await contractStore.updateDeflationaryConfig(jettonAddress.value, config)
-    
+
     // For now, just show a success message
     const notification = document.createElement('div')
     notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-md shadow-lg z-50'
     notification.textContent = 'Deflationary mechanism updated!'
     document.body.appendChild(notification)
-    
+
     setTimeout(() => {
       if (notification.parentNode) {
         notification.parentNode.removeChild(notification)
@@ -797,4 +794,4 @@ watch(() => walletStore.isConnected, () => {
     loadJettonDetails()
   }
 })
-</script> 
+</script>

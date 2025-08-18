@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useTonConnect } from '@/composables/useTonConnect'
 import { getTonApiClient } from '@shared/blockchain/ton-api'
-import { useContractStore } from './contract.js'
 
 export const useWalletStore = defineStore('wallet', () => {
   const { 
@@ -66,14 +65,8 @@ export const useWalletStore = defineStore('wallet', () => {
   }
 
   const getCurrentNetwork = () => {
-    // Get network from contract store instead of URL
-    try {
-      const contractStore = useContractStore()
-      return contractStore.activeNetwork
-    } catch (error) {
-      console.warn('Could not get network from contract store, defaulting to testnet:', error)
-      return 'testnet'
-    }
+    // Default to testnet to avoid circular dependency
+    return 'testnet'
   }
 
   // Fetch all Jetton data for a wallet address from blockchain

@@ -4,10 +4,10 @@
       <div>
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Contract Preview</h2>
         <p class="text-sm text-gray-500 dark:text-gray-400">
-          Review the generated FunC contract code before deployment
+          Review the generated FunC contract code before compilation
         </p>
       </div>
-      
+
       <button 
         @click="handleCopyCode"
         class="inline-flex items-center px-3 py-1.5 border border-blue-600 text-sm font-medium rounded-md text-blue-600 bg-white hover:bg-blue-50 dark:text-blue-400 dark:border-blue-400 dark:hover:bg-blue-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -19,7 +19,7 @@
         Copy Code
       </button>
     </div>
-    
+
     <!-- Compile Result Alert -->
     <div v-if="compileResult" :class="[
       'rounded-lg p-4 mb-4',
@@ -47,6 +47,10 @@
           ]">
             {{ compileResult.message }}
           </p>
+          <div v-if="compileResult.success" class="mt-2 text-xs text-green-600 dark:text-green-400">
+            <p>Contract Hash: {{ compileResult.contractHash }}</p>
+            <p>Code Size: {{ compileResult.codeSize }} bytes</p>
+          </div>
         </div>
       </div>
     </div>
@@ -57,15 +61,26 @@
       <div class="border-b border-gray-200 dark:border-gray-700 mb-2">
         <nav class="flex -mb-px">
           <button
-            @click="activeTab = 'preview'"
+            @click="activeTab = 'minter'"
             :class="[
               'py-2 px-4 text-sm font-medium border-b-2',
-              activeTab === 'preview'
+              activeTab === 'minter'
                 ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
             ]"
           >
-            Contract Preview
+            Jetton Minter
+          </button>
+          <button
+            @click="activeTab = 'wallet'"
+            :class="[
+              'py-2 px-4 text-sm font-medium border-b-2 ml-8',
+              activeTab === 'wallet'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+            ]"
+          >
+            Jetton Wallet
           </button>
           <button
             @click="activeTab = 'metadata'"
@@ -83,11 +98,11 @@
 
       <!-- Tab Content -->
       <div class="mt-2">
-        <!-- Contract Preview Tab -->
-        <div v-if="activeTab === 'preview'">
+        <!-- Jetton Minter Tab -->
+        <div v-if="activeTab === 'minter'">
           <div class="bg-gray-800 rounded-md overflow-hidden border border-gray-700">
             <div class="flex items-center justify-between px-4 py-2 bg-gray-900">
-              <span class="text-sm font-medium text-gray-200">{{ config.token.symbol }}.fc</span>
+              <span class="text-sm font-medium text-gray-200">jetton-minter.fc</span>
               <div class="flex items-center space-x-2">
                 <span v-if="compileResult?.success" class="text-xs text-green-400 flex items-center">
                   <svg class="h-3 w-3 mr-1" viewBox="0 0 20 20" fill="currentColor">
@@ -102,12 +117,27 @@
                     <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
                     <path d="M3 21v-5h5"/>
                   </svg>
-                  Preview
+                  Generated
                 </span>
               </div>
             </div>
             <div class="p-4 font-mono text-sm text-gray-200 overflow-x-auto" style="max-height: 400px">
-              <pre class="whitespace-pre-wrap">{{ previewCode }}</pre>
+              <pre class="whitespace-pre-wrap">{{ minterCode }}</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Jetton Wallet Tab -->
+        <div v-if="activeTab === 'wallet'">
+          <div class="bg-gray-800 rounded-md overflow-hidden border border-gray-700">
+            <div class="flex items-center justify-between px-4 py-2 bg-gray-900">
+              <span class="text-sm font-medium text-gray-200">jetton-wallet.fc</span>
+              <div class="flex items-center space-x-2">
+                <span class="text-xs text-blue-400">Custom Fee Logic</span>
+              </div>
+            </div>
+            <div class="p-4 font-mono text-sm text-gray-200 overflow-x-auto" style="max-height: 400px">
+              <pre class="whitespace-pre-wrap">{{ walletCode }}</pre>
             </div>
           </div>
         </div>
@@ -140,6 +170,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { generateJettonMinter, generateJettonWallet } from '@/lib/contract-generator.js'
 
 const props = defineProps({
   config: {
@@ -152,147 +183,51 @@ const props = defineProps({
   }
 })
 
-const activeTab = ref('preview')
+const activeTab = ref('minter')
 
-const previewCode = computed(() => {
-  const { token, transactionFee, buyback } = props.config
-  
-  return `#include "imports/stdlib.fc";
+// Generate actual contract code based on configuration
+const minterCode = computed(() => {
+  return generateJettonMinter(props.config)
+})
 
-;; TON ${token.name} Token Contract
-;; Symbol: ${token.symbol}
-;; Decimals: ${token.decimals}
-;; Total Supply: ${token.totalSupply.toLocaleString()}
-;; Transaction Fee: ${transactionFee.feePercentage}%
-
-;; Constants
-const int min_tons_for_storage = 10000000; ;; 0.01 TON
-const int gas_consumption = 10000000; ;; 0.01 TON
-const slice jetton_wallet_code = "${token.symbol}_wallet_code"c;
-
-;; Storage variables
-global slice storage::owner_address;
-global slice storage::jetton_wallet_code;
-global cell storage::jetton_content;
-global int storage::total_supply;
-global int storage::mintable?;
-
-() load_data() impure {
-  slice ds = get_data().begin_parse();
-  storage::total_supply = ds~load_coins();
-  storage::mintable? = ds~load_int(1);
-  storage::owner_address = ds~load_msg_addr();
-  storage::jetton_wallet_code = ds~load_ref().begin_parse();
-  storage::jetton_content = ds~load_ref();
-}
-
-() save_data() impure {
-  set_data(begin_cell()
-    .store_coins(storage::total_supply)
-    .store_int(storage::mintable?, 1)
-    .store_slice(storage::owner_address)
-    .store_ref(begin_cell().store_slice(storage::jetton_wallet_code).end_cell())
-    .store_ref(storage::jetton_content)
-    .end_cell());
-}
-
-;; Transaction Fee Implementation
-int apply_transaction_fee(int amount) {
-  int fee = (amount * ${transactionFee.feePercentage}) / 100;
-  int after_fee = amount - fee;
-  
-  ;; Fee distribution: ${transactionFee.buybackPercentage}% buyback, ${transactionFee.treasuryPercentage}% treasury
-  int buyback_amount = (fee * ${transactionFee.buybackPercentage}) / 100;
-  int treasury_amount = fee - buyback_amount;
-  
-  ;; Process buyback and burn
-  if (buyback_amount > 0) {
-    process_buyback(buyback_amount);
-  }
-  
-  return after_fee;
-}
-
-;; Buyback & Burn Mechanism
-() process_buyback(int amount) impure {
-  ;; Trigger type: ${buyback.triggerType}
-  ;; Threshold: ${buyback.thresholdAmount} TON
-  ;; Max per tx: ${buyback.maxBuybackPerTx} TON
-  ;; Period: ${buyback.timePeriod}
-  
-  int clamped_amount = min(amount, ${buyback.maxBuybackPerTx} * 1000000000);
-  
-  if (clamped_amount > 0) {
-    ;; Burn tokens from supply
-    storage::total_supply -= clamped_amount;
-    save_data();
-  }
-}
-
-;; Main message handler
-() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
-  if (in_msg_body.slice_empty?()) { return (); }
-  
-  slice cs = in_msg_full.begin_parse();
-  int flags = cs~load_uint(4);
-  if (flags & 1) { return (); }
-  
-  slice sender_address = cs~load_msg_addr();
-  
-  load_data();
-  
-  int op = in_msg_body~load_uint(32);
-  int query_id = in_msg_body~load_uint(64);
-  
-  if (op == 1) { ;; Transfer
-    int jetton_amount = in_msg_body~load_coins();
-    int after_fee_amount = apply_transaction_fee(jetton_amount);
-    ;; Implementation of token transfer logic
-  }
-  
-  if (op == 2) { ;; Burn
-    int burn_amount = in_msg_body~load_coins();
-    storage::total_supply -= burn_amount;
-    save_data();
-    ;; Implementation of token burning logic
-  }
-  
-  if (op == 21) { ;; Mint (owner only)
-    throw_unless(73, equal_slices(sender_address, storage::owner_address));
-    int mint_amount = in_msg_body~load_coins();
-    storage::total_supply += mint_amount;
-    save_data();
-    ;; Implementation of token minting logic
-  }
-  
-  ;; Implementation of token sending logic
-}`
+const walletCode = computed(() => {
+  return generateJettonWallet(props.config)
 })
 
 const metadataJson = computed(() => {
   const { token, transactionFee, buyback } = props.config
-  
+
   const metadata = {
     name: token.name,
     symbol: token.symbol,
     decimals: token.decimals,
-    description: token.description || `${token.name} - A deflationary TON token with automatic buyback-burn mechanism`,
+    description: token.description || `${token.name} - A custom TON token`,
     image: token.imageUrl || "https://ton.org/jetton-default-image.png",
-    fee_percentage: transactionFee.feePercentage,
-    buyback_percentage: transactionFee.buybackPercentage,
-    treasury_percentage: transactionFee.treasuryPercentage,
-    buyback_threshold: buyback.thresholdAmount,
-    max_buyback_per_tx: buyback.maxBuybackPerTx,
-    total_supply: token.totalSupply
+
+    // Contract configuration embedded in metadata for transparency
+    contract_config: {
+      has_transaction_fees: transactionFee && transactionFee.distributionType !== 'none',
+      fee_percentage: transactionFee?.feePercentage || 0,
+      buyback_percentage: transactionFee?.buybackPercentage || 0,
+      treasury_percentage: transactionFee?.treasuryPercentage || 0,
+      has_deflationary_mechanism: buyback && buyback.triggerType !== 'none',
+      buyback_threshold: buyback?.thresholdAmount || 0,
+      max_buyback_per_tx: buyback?.maxBuybackPerTx || 0,
+      buyback_trigger: buyback?.triggerType || 'none'
+    },
+
+    total_supply: token.totalSupply,
+    created_at: new Date().toISOString(),
+    contract_version: "1.0.0"
   }
-  
+
   return JSON.stringify(metadata, null, 2)
 })
 
 const handleCopyCode = async () => {
   try {
-    await navigator.clipboard.writeText(previewCode.value)
-    // Simple notification (you could implement a toast system)
+    const codeToShare = activeTab.value === 'minter' ? minterCode.value : walletCode.value
+    await navigator.clipboard.writeText(codeToShare)
     alert('Contract code copied to clipboard!')
   } catch (err) {
     console.error('Failed to copy:', err)
@@ -366,4 +301,4 @@ pre {
 .badge {
   font-size: 0.75rem;
 }
-</style> 
+</style>

@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000'
+const API_BASE_URL = process.env.NODE_ENV === 'production' ? '' : '/api'
 
 export const apiRequest = async (endpoint, options = {}) => {
   const url = `${API_BASE_URL}${endpoint}`

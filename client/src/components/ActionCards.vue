@@ -9,7 +9,7 @@
         </div>
         <p class="text-sm text-gray-500 dark:text-gray-400">Build your FunC smart contract</p>
       </div>
-      
+
       <div class="px-6 py-4">
         <div v-if="compileResult" class="mb-4">
           <div class="flex items-center">
@@ -20,7 +20,7 @@
             </span>
           </div>
         </div>
-        
+
         <button
           @click="onCompile"
           class="w-full inline-flex items-center justify-center px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm font-medium"
@@ -40,7 +40,7 @@
         </div>
         <p class="text-sm text-gray-500 dark:text-gray-400">Verify contract functionality</p>
       </div>
-      
+
       <div class="px-6 py-4">
         <div v-if="testResult" class="mb-4">
           <div class="flex items-center">
@@ -54,7 +54,7 @@
             {{ testResult.message }}
           </p>
         </div>
-        
+
         <button
           @click="onRunTests"
           :disabled="!isCompiled"
@@ -66,7 +66,7 @@
           ]"
         >
           <ClipboardCheckIcon class="h-4 w-4 mr-2" />
-          Run Tests
+          Run Tests {{ isCompiled ? '(Ready)' : '(Disabled)' }}
         </button>
       </div>
     </div>
@@ -80,7 +80,7 @@
         </div>
         <p class="text-sm text-gray-500 dark:text-gray-400">Launch to {{ activeNetwork.toUpperCase() }}</p>
       </div>
-      
+
       <div class="px-6 py-4">
         <div v-if="deployResult" class="mb-4">
           <div class="flex items-center">
@@ -90,7 +90,7 @@
               {{ deployResult.message }}
             </span>
           </div>
-          
+
           <div v-if="deployResult.success && deployResult.address" class="mt-2">
             <div class="flex items-center justify-between text-xs">
               <span class="text-gray-500">Contract Address:</span>
@@ -106,7 +106,7 @@
             </div>
           </div>
         </div>
-        
+
         <button
           @click="handleDeploy"
           :disabled="!testsPassed || isDeploying"
@@ -123,7 +123,7 @@
           </template>
           <template v-else>
             <CloudUploadIcon class="h-4 w-4 mr-2" />
-            Deploy to {{ activeNetwork.toUpperCase() }}
+            Deploy {{ testsPassed ? '(Ready)' : '(Need Tests)' }}
           </template>
         </button>
       </div>
@@ -177,39 +177,43 @@ export default {
   setup(props, { emit }) {
     const walletStore = useWalletStore()
     const isDeploying = ref(false)
-    
+
     const isCompiled = computed(() => {
-      return props.compileResult?.success || false
+      console.log('Computing isCompiled:', props.compileResult)
+      return props.compileResult?.success === true
     })
-    
+
     const testsPassed = computed(() => {
-      return props.testResult?.success || false
+      console.log('Computing testsPassed:', props.testResult)
+      return props.testResult?.success === true
     })
-    
+
     const testsCount = computed(() => {
-      if (props.testResult) {
-        return `${props.testResult.testsPassed}/${props.testResult.testsRun}`
+      if (props.testResult && props.testResult.tests) {
+        const passedTests = props.testResult.tests.filter(t => t.passed).length
+        const totalTests = props.testResult.tests.length
+        return `${passedTests}/${totalTests}`
       }
-      return "0/4"
+      return "0/5"
     })
-    
+
     const getTonscanUrl = (address) => {
       const formattedAddress = address.replace(/^0x/, '')
-      
+
       if (props.activeNetwork === 'testnet') {
         return `https://testnet.tonscan.org/address/${formattedAddress}`
       }
       return `https://tonscan.org/address/${formattedAddress}`
     }
-    
+
     const onCompile = () => {
       emit('compile')
     }
-    
+
     const onRunTests = () => {
       emit('runTests')
     }
-    
+
     const handleDeploy = async () => {
       // Check if wallet is connected
       if (!walletStore.isConnected) {
@@ -219,11 +223,11 @@ export default {
           return // User cancelled or connection failed
         }
       }
-      
+
       // Wallet is now connected, proceed with deployment
       try {
         isDeploying.value = true
-        
+
         // Introduce a slight delay to simulate the wallet interaction
         setTimeout(() => {
           emit('deploy')
@@ -234,7 +238,7 @@ export default {
         console.error('Deployment failed:', error)
       }
     }
-    
+
     return {
       isDeploying,
       isCompiled,
@@ -304,4 +308,4 @@ code {
   font-size: 0.85rem;
   word-break: break-all;
 }
-</style> 
+</style>

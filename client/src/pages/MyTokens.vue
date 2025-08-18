@@ -1,7 +1,5 @@
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-slate-900">
-    <Header />
-    
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div class="flex justify-between items-center mb-8">
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">My Tokens</h1>
@@ -103,7 +101,7 @@
             Showing {{ filteredTokens.length }} token{{ filteredTokens.length !== 1 ? 's' : '' }}
             {{ selectedNetwork !== 'all' ? `on ${selectedNetwork}` : '' }}
           </div>
-          
+
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div 
               v-for="token in filteredTokens" 
@@ -181,7 +179,6 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWalletStore } from '@/stores/wallet'
-import Header from '@/components/Header.vue'
 
 const router = useRouter()
 const walletStore = useWalletStore()
@@ -235,7 +232,7 @@ const clearTokens = () => {
 const loadTokens = async () => {
   try {
     isLoading.value = true
-    
+
     // Always try to load real data from blockchain when wallet is connected
     if (walletStore.isConnected) {
       const walletAddress = walletStore.getRawAddress()
@@ -249,17 +246,17 @@ const loadTokens = async () => {
           console.error('Failed to parse stored tokens:', parseError)
           tokens.value = []
         }
-        
+
         // Then try to sync from blockchain to get any missing tokens
         try {
           const blockchainTokens = await walletStore.fetchAllJettonData(walletAddress)
           console.log('Fetched tokens from blockchain:', blockchainTokens)
-          
+
           if (blockchainTokens.length > 0) {
             // Merge blockchain tokens with stored tokens, avoiding duplicates
             const existingAddresses = new Set(tokens.value.map(t => t.address))
             const newTokens = blockchainTokens.filter(token => !existingAddresses.has(token.address))
-            
+
             if (newTokens.length > 0) {
               const updatedTokens = [...tokens.value, ...newTokens]
               localStorage.setItem(`tokens_${walletAddress}`, JSON.stringify(updatedTokens))
@@ -335,4 +332,4 @@ watch(() => walletStore.isConnected, (isConnected) => {
     tokens.value = []
   }
 })
-</script> 
+</script>

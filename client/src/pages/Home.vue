@@ -1,12 +1,5 @@
 <template>
-  <div class="bg-gray-50 font-sans text-gray-900 dark:bg-slate-900 dark:text-gray-100 min-h-screen">
-    <Header />
-    
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div class="flex flex-col lg:flex-row gap-6">
-        <Sidebar :activeNetwork="activeNetwork" @networkChange="setActiveNetwork" />
-        
-        <div class="flex-1">
+  <div class="flex-1">
           <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
             <!-- Header with Action Buttons -->
             <div class="border-b border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-4">
@@ -15,7 +8,7 @@
                   <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">TON Token Minter</h3>
                   <p class="text-sm text-gray-500 dark:text-gray-400">Create and deploy your custom TON token</p>
                 </div>
-                <button 
+                <button
                   class="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   @click="toggleContractPreview"
                 >
@@ -30,12 +23,12 @@
 
             <!-- Contract Preview or Configuration Tabs -->
             <div v-if="showContractPreview" class="p-4 sm:p-6">
-              <ContractPreview 
+              <ContractPreview
                 :config="contractConfig"
                 :compileResult="compileResult"
               />
               <div class="mt-6 flex justify-between">
-                <button 
+                <button
                   @click="toggleContractPreview"
                   class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
@@ -44,8 +37,8 @@
                   </svg>
                   Back to Configuration
                 </button>
-                
-                <button 
+
+                <button
                   @click="handleCompile"
                   class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
@@ -79,19 +72,19 @@
               <!-- Tab Content -->
               <div class="p-4 sm:p-6">
                 <div v-if="activeTab === 'tokenConfig'">
-                  <TokenConfiguration 
+                  <TokenConfiguration
                     :config="contractConfig.token"
                     @change="updateTokenConfig"
                   />
                 </div>
                 <div v-if="activeTab === 'txFeeSettings'">
-                  <TransactionFeeSettings 
+                  <TransactionFeeSettings
                     :config="contractConfig.transactionFee"
                     @change="updateTransactionFeeConfig"
                   />
                 </div>
                 <div v-if="activeTab === 'buybackBurn'">
-                  <BuybackBurnSettings 
+                  <BuybackBurnSettings
                     :config="contractConfig.buyback"
                     :tokenSymbol="contractConfig.token.symbol"
                     @change="updateBuybackConfig"
@@ -101,7 +94,7 @@
 
               <!-- Footer Navigation -->
               <div class="border-t border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between w-full">
-                <button 
+                <button
                   v-if="activeTab !== 'tokenConfig'"
                   @click="handlePrevTab"
                   class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -112,8 +105,8 @@
                   Previous
                 </button>
                 <div v-else></div>
-                
-                <button 
+
+                <button
                   @click="handleNextTab"
                   class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
@@ -127,26 +120,21 @@
           </div>
 
           <!-- Action Cards (Deploy & Test) -->
-          <ActionCards 
-            :compileResult="compileResult"
-            :testResult="testResult"
-            :deployResult="deployResult"
-            :activeNetwork="activeNetwork"
+          <ActionCards
+            :compileResult="contractStore.compileResult"
+            :testResult="contractStore.testResult"
+            :deployResult="contractStore.deployResult"
+            :activeNetwork="props.activeNetwork"
             @compile="handleCompile"
             @runTests="handleRunTests"
             @deploy="handleDeploy"
           />
         </div>
-      </div>
-    </div>
-  </div>
 </template>
 
 <script setup>
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import Header from '@/components/Header.vue'
-import Sidebar from '@/components/Sidebar.vue'
 import TokenConfiguration from '@/components/TokenConfiguration.vue'
 import TransactionFeeSettings from '@/components/TransactionFeeSettings.vue'
 import BuybackBurnSettings from '@/components/BuybackBurnSettings.vue'
@@ -154,11 +142,20 @@ import ContractPreview from '@/components/ContractPreview.vue'
 import ActionCards from '@/components/ActionCards.vue'
 import { useContractStore } from '@/stores/contract'
 
+// Props from App.vue
+const props = defineProps({
+  activeNetwork: {
+    type: String,
+    default: 'testnet'
+  }
+})
+
+const emit = defineEmits(['networkChange'])
+
 const contractStore = useContractStore()
 const router = useRouter()
 
 const activeTab = ref('tokenConfig')
-const activeNetwork = ref('testnet')
 const showContractPreview = ref(false)
 
 const tabs = [
@@ -245,77 +242,77 @@ const toggleContractPreview = () => {
 // Validation functions
 const validateTokenConfig = () => {
   const { name, symbol, decimals, totalSupply, initialPrice } = contractConfig.token
-  
+
   if (!name || name.length < 1) {
     alert('Token name is required')
     return false
   }
-  
+
   if (!symbol || symbol.length < 1) {
     alert('Token symbol is required')
     return false
   }
-  
+
   if (!/^[A-Z0-9]+$/.test(symbol)) {
     alert('Symbol must contain only uppercase letters and numbers')
     return false
   }
-  
+
   if (decimals < 0 || decimals > 18) {
     alert('Decimals must be between 0 and 18')
     return false
   }
-  
+
   if (totalSupply <= 0) {
     alert('Total supply must be greater than 0')
     return false
   }
-  
+
   if (initialPrice <= 0) {
     alert('Initial price must be greater than 0')
     return false
   }
-  
+
   return true
 }
 
 const validateTransactionFeeConfig = () => {
   const { feePercentage, distributionType, buybackPercentage, treasuryPercentage } = contractConfig.transactionFee
-  
+
   if (feePercentage < 0 || feePercentage > 10) {
     alert('Fee percentage must be between 0 and 10%')
     return false
   }
-  
+
   if (distributionType === 'custom') {
     if ((buybackPercentage + treasuryPercentage) !== 100) {
       alert('Buyback and treasury percentages must add up to 100%')
       return false
     }
   }
-  
+
   return true
 }
 
 const validateBuybackConfig = () => {
   const { thresholdAmount, maxBuybackPerTx } = contractConfig.buyback
-  
+
   if (thresholdAmount <= 0) {
     alert('Threshold amount must be greater than 0')
     return false
   }
-  
+
   if (maxBuybackPerTx <= 0) {
     alert('Maximum buyback per transaction must be greater than 0')
     return false
   }
-  
+
   return true
 }
 
 // Network and config update functions
 const setActiveNetwork = (network) => {
-  activeNetwork.value = network
+  emit('networkChange', network)
   console.log(`Network changed to: ${network}`)
 }
 
@@ -368,19 +365,16 @@ const handleRunTests = async () => {
 
 const handleDeploy = async () => {
   try {
-    const result = await contractStore.deployContract()
-    deployResult.value = result
-    
+    await contractStore.deployContract()
+    const result = contractStore.deployResult
+
     // Redirect to jetton management page on successful deployment
-    if (result.success && result.address) {
+    if (result?.success && result.address) {
       router.push(`/jetton/${result.address}`)
     }
   } catch (error) {
     console.error('Deployment failed:', error)
-    deployResult.value = {
-      success: false,
-      message: error.message || 'Deployment failed'
-    }
+    // Error is already handled in the store
   }
 }
 </script>
@@ -429,4 +423,4 @@ const handleDeploy = async () => {
     color: #f8f9fa;
   }
 }
-</style> 
+</style>
