@@ -125,11 +125,16 @@ export const useContractStore = defineStore('contract', () => {
         throw new Error(`Invalid token configuration: ${issues.join(', ')}`)
       }
 
-      console.log('Starting client-side contract compilation...')
+      console.log('Generating dynamic contracts from user configuration...')
 
-      // Generate contract code using client-side generator
+      // Generate contract code using client-side generator - NO SERVER FALLBACK
       const minterCode = generateJettonMinter(fullConfig.value)
       const walletCode = generateJettonWallet(fullConfig.value)
+      
+      console.log('✅ Using ONLY user-configured dynamic contracts')
+      console.log(`Minter contract features: ${JSON.stringify(fullConfig.value.token)}`)
+      console.log(`Transaction fees: ${transactionFeeConfig.value.distributionType !== 'none' ? transactionFeeConfig.value.feePercentage + '%' : 'disabled'}`)
+      console.log(`Buyback mechanism: ${buybackConfig.value.triggerType !== 'none' ? buybackConfig.value.triggerType : 'disabled'}`)
 
       // Generate a unique hash for this configuration
       const configString = JSON.stringify(fullConfig.value)
@@ -188,7 +193,8 @@ export const useContractStore = defineStore('contract', () => {
 
       console.log('Starting client-side contract testing...')
 
-      // Run client-side tests
+      // Run client-side tests on user's EXACT configuration
+      console.log('Testing user-configured dynamic contracts (NO FALLBACKS)')
       const tests = [
         await testTEP74Compliance(),
         await testTransactionFeeLogic(),
@@ -344,10 +350,17 @@ export const useContractStore = defineStore('contract', () => {
         throw new Error('TON Connect UI not available')
       }
 
-      // Deploy using the real deployment controller
+      // Deploy using ONLY the user's dynamic contract configuration
       const deployConfig = {
-        ...deploymentConfig.value
+        minterCode: compileResult.value.minterCode,
+        walletCode: compileResult.value.walletCode,
+        config: compileResult.value.config,
+        userGenerated: true, // Flag to ensure no fallbacks
+        customFeatures: compileResult.value.customFeatures
       }
+      
+      console.log('🚀 Deploying user-configured dynamic contracts ONLY')
+      console.log('Custom features:', deployConfig.customFeatures)
 
       const contractAddr = await jettonDeployController.createJetton(
         deployConfig,

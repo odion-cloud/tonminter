@@ -3,15 +3,12 @@ import { Cell, beginCell, Address, beginDict, toNano } from "ton";
 import { Sha256 } from "@aws-crypto/sha256-js";
 import axios from "axios";
 
-import walletHex from "../contracts/jetton-wallet.compiled.json";
-import minterHex from "../contracts/jetton-minter.compiled.json";
-
 const ONCHAIN_CONTENT_PREFIX = 0x00;
 const OFFCHAIN_CONTENT_PREFIX = 0x01;
 const SNAKE_PREFIX = 0x00;
 
-export const JETTON_WALLET_CODE = Cell.fromBoc(walletHex.hex)[0];
-export const JETTON_MINTER_CODE = Cell.fromBoc(minterHex.hex)[0];
+// Dynamic contract codes will be generated and passed in
+// No more static imports or fallbacks
 
 export const OPS = {
   ChangeAdmin: 3,
@@ -44,6 +41,14 @@ export const jettonOnChainMetadataSpec = {
   deflationary_enable_burn_on_buyback: "utf8"
 };
 
+// Keys that should be excluded from onchain metadata (handled separately in contract state)
+const EXCLUDED_METADATA_KEYS = ['totalSupply', 'initialPrice'];
+
+// Key mappings for compatibility
+const KEY_MAPPINGS = {
+  'imageUrl': 'image'
+};
+
 const sha256 = (str) => {
   const sha = new Sha256();
   sha.update(str);
@@ -55,12 +60,22 @@ export function buildJettonOnchainMetadata(data) {
   const dict = beginDict(KEYLEN);
 
   Object.entries(data).forEach(([k, v]) => {
-    if (!jettonOnChainMetadataSpec[k]) {
-      throw new Error(`Unsupported onchain key: ${k}`);
+    // Skip keys that are not part of jetton metadata spec
+    if (EXCLUDED_METADATA_KEYS.includes(k)) {
+      return;
+    }
+    
+    // Apply key mappings for compatibility
+    const mappedKey = KEY_MAPPINGS[k] || k;
+    
+    if (!jettonOnChainMetadataSpec[mappedKey]) {
+      throw new Error(`Unsupported onchain key: ${k} (mapped to: ${mappedKey})`);
     }
     if (v === undefined || v === "") return;
 
-    let bufferToStore = Buffer.from(v, jettonOnChainMetadataSpec[k]);
+    // Convert numeric values to strings
+    const stringValue = typeof v === 'number' ? v.toString() : v;
+    let bufferToStore = Buffer.from(stringValue, jettonOnChainMetadataSpec[mappedKey]);
     const CELL_MAX_SIZE_BYTES = Math.floor((1023 - 8) / 8);
 
     const rootCell = new Cell();
@@ -77,7 +92,7 @@ export function buildJettonOnchainMetadata(data) {
       }
     }
 
-    dict.storeRef(sha256(k), rootCell);
+    dict.storeRef(sha256(mappedKey), rootCell);
   });
 
   return beginCell().storeInt(ONCHAIN_CONTENT_PREFIX, 8).storeDict(dict.endDict()).endCell();
@@ -182,17 +197,22 @@ function parseJettonOnchainMetadata(contentSlice) {
   };
 }
 
-export function initData(owner, data, offchainUri) {
+export function initData(owner, data, offchainUri, jettonWalletCode) {
   if (!data && !offchainUri) {
     throw new Error("Must either specify onchain data or offchain uri");
   }
+  
+  if (!jettonWalletCode) {
+    throw new Error("Jetton wallet code must be provided - no fallbacks allowed");
+  }
+  
   return beginCell()
     .storeCoins(0)
     .storeAddress(owner)
     .storeRef(
       offchainUri ? buildJettonOffChainMetadata(offchainUri) : buildJettonOnchainMetadata(data)
     )
-    .storeRef(JETTON_WALLET_CODE)
+    .storeRef(jettonWalletCode)
     .endCell();
 }
 
