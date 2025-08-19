@@ -3,6 +3,9 @@ import { Cell, beginCell, Address, beginDict, toNano } from "ton";
 import { Sha256 } from "@aws-crypto/sha256-js";
 import axios from "axios";
 
+// Dynamic contract codes will be generated and compiled at runtime
+// No static BOC fallbacks - all contracts are user-generated and compiled with func-js
+
 const ONCHAIN_CONTENT_PREFIX = 0x00;
 const OFFCHAIN_CONTENT_PREFIX = 0x01;
 const SNAKE_PREFIX = 0x00;
@@ -64,10 +67,10 @@ export function buildJettonOnchainMetadata(data) {
     if (EXCLUDED_METADATA_KEYS.includes(k)) {
       return;
     }
-    
+
     // Apply key mappings for compatibility
     const mappedKey = KEY_MAPPINGS[k] || k;
-    
+
     if (!jettonOnChainMetadataSpec[mappedKey]) {
       throw new Error(`Unsupported onchain key: ${k} (mapped to: ${mappedKey})`);
     }
@@ -201,11 +204,11 @@ export function initData(owner, data, offchainUri, jettonWalletCode) {
   if (!data && !offchainUri) {
     throw new Error("Must either specify onchain data or offchain uri");
   }
-  
+
   if (!jettonWalletCode) {
     throw new Error("Jetton wallet code must be provided - no fallbacks allowed");
   }
-  
+
   return beginCell()
     .storeCoins(0)
     .storeAddress(owner)
@@ -273,4 +276,4 @@ export function updateMetadataBody(metadata) {
     .storeUint(0, 64)
     .storeRef(metadata)
     .endCell();
-} 
+}

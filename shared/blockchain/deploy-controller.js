@@ -18,7 +18,8 @@ import {
   changeAdminBody,
   readJettonMetadata,
   initData,
-  JETTON_MINTER_CODE
+  JETTON_MINTER_CODE,
+  JETTON_WALLET_CODE
 } from "./jetton-minter.js";
 import crypto from "crypto";
 
@@ -41,59 +42,36 @@ class JettonDeployController {
     this.deployer = new ContractDeployer()
   }
 
-  
+
 
   async compileFuncCode(sourceCode, contractType) {
     try {
-      console.log(`Processing ${contractType} contract...`)
+      const { compileFunc } = await import('@ton-community/func-js');
 
-      // For now, we'll use the provided contract codes directly
-      // In production, this would integrate with a FunC compiler
+      console.log(`Compiling ${contractType} contract...`);
+      const compileResult = await compileFunc({
+        targets: [`${contractType}.fc`],
+        sources: {
+          [`${contractType}.fc`]: sourceCode
+        }
+      });
       
-      // Create a mock compiled cell from the source code
-      const sourceBuffer = Buffer.from(sourceCode, 'utf8')
-      const mockCompiledCode = beginCell()
-        .storeBuffer(sourceBuffer.slice(0, Math.min(sourceBuffer.length, 127)))
-        .endCell()
-
-      return {
-        code: mockCompiledCode,
-        source: sourceCode,
-        compiledAt: new Date().toISOString()
+      if (compileResult.status === 'error') {
+        throw new Error(`FunC compilation failed: ${compileResult.message}`);
       }
 
+      // Return the compiled BOC data
+      return {
+        success: true,
+        boc: compileResult.codeBoc,
+        codeBoc: compileResult.codeBoc,
+        fiftCode: compileResult.fiftCode || null
+      };
+
     } catch (error) {
-      console.error(`Failed to process ${contractType} contract:`, error)
-      throw error
+      console.error(`FunC compilation error for ${contractType}:`, error);
+      throw new Error(`Compilation failed: ${error.message}`);
     }
-  }
-
-  async getStdlibCode() {
-    // Return standard library code for FunC compilation
-    return `
-#pragma version >=0.2.0;
-
-int workchain() asm "0 PUSHINT";
-
-() force_chain(slice addr) impure {
-  (int wc, _) = parse_std_addr(addr);
-  throw_unless(333, wc == workchain());
-}
-
-slice calculate_jetton_wallet_address(slice owner_address, slice jetton_minter_address, cell jetton_wallet_code) {
-  return begin_cell()
-    .store_uint(4, 3)
-    .store_int(0, 8)
-    .store_uint(cell_hash(begin_cell()
-      .store_uint(0, 2)
-      .store_dict(jetton_wallet_code)
-      .store_dict(begin_cell().store_slice(owner_address).store_slice(jetton_minter_address).end_cell())
-      .store_uint(0, 1)
-      .end_cell()), 256)
-    .end_cell()
-    .begin_parse();
-}
-    `
   }
 
   createJettonContent(tokenConfig) {
@@ -129,7 +107,7 @@ slice calculate_jetton_wallet_address(slice owner_address, slice jetton_minter_a
     // Create initial mint message if needed
     const config = deployConfig.config || deployConfig;
     const token = config.token || config;
-    
+
     if (token.initialMint && token.initialMint > 0) {
       const decimals = token.decimals || 9;
       const mintAmount = BigInt(token.initialMint) * BigInt(Math.pow(10, decimals));
@@ -145,99 +123,272 @@ slice calculate_jetton_wallet_address(slice owner_address, slice jetton_minter_a
     return null;
   }
 
-  convertCodeToCell(codeString, codeType) {
+
+
+  async getJettonDetails(jettonAddress, ownerAddress, network = 'testnet') {
     try {
-      // If it's already a Cell, return it
-      if (codeString instanceof Cell) {
-        return codeString;
+      const client = await getTonClient(network)
+
+      // Convert string address to Address object if needed
+      const minterAddress = typeof jettonAddress === 'string' ? Address.parse(jettonAddress) : jettonAddress
+
+      // Get jetton data from the minter contract
+      const jettonData = await makeGetCall(
+        client,
+        minterAddress,
+        'get_jetton_data',
+        []
+      )
+
+      if (!jettonData || jettonData.length < 5) {
+        throw new Error('Invalid jetton data response')
       }
 
-      // Try to parse as base64 BOC first
+      const [totalSupply, mintable, adminAddress, jettonContent, jettonWalletCode] = jettonData
+
+      // Calculate jetton wallet address for the owner
+      let jettonWalletAddress = null
+      let balance = new BN(0)
+
+      if (ownerAddress) {
+        try {
+          const walletAddressResult = await makeGetCall(
+            client,
+            jettonAddress,
+            'get_wallet_address',
+            [{ type: 'slice', cell: beginCell().storeAddress(ownerAddress).endCell() }]
+          )
+
+          if (walletAddressResult && walletAddressResult.length > 0) {
+            jettonWalletAddress = cellToAddress(walletAddressResult[0])
+
+            // Get wallet balance
+            try {
+              const walletData = await makeGetCall(
+                client,
+                jettonWalletAddress,
+                'get_wallet_data',
+                []
+              )
+
+              if (walletData && walletData.length > 0) {
+                balance = new BN(walletData[0].toString())
+              }
+            } catch (walletError) {
+              console.warn('Failed to get wallet balance:', walletError)
+            }
+          }
+        } catch (addressError) {
+          console.warn('Failed to get jetton wallet address:', addressError)
+        }
+      }
+
+      // Parse metadata from jetton content
+      let metadata = {
+        name: 'Unknown Token',
+        symbol: 'N/A',
+        description: '',
+        image: '',
+        decimals: '9'
+      }
+
       try {
-        const buffer = Buffer.from(codeString, 'base64');
-        return Cell.fromBoc(buffer)[0];
-      } catch (bocError) {
-        console.warn(`Failed to parse ${codeType} as BOC:`, bocError.message);
+        const metadataResult = await readJettonMetadata(jettonContent)
+        if (metadataResult && metadataResult.metadata) {
+          metadata = { ...metadata, ...metadataResult.metadata }
+        }
+      } catch (metadataError) {
+        console.warn('Failed to read jetton metadata:', metadataError)
       }
 
-      // Try to parse as hex string
-      try {
-        const buffer = Buffer.from(codeString, 'hex');
-        return Cell.fromBoc(buffer)[0];
-      } catch (hexError) {
-        console.warn(`Failed to parse ${codeType} as hex BOC:`, hexError.message);
+      return {
+        jettonAddress: minterAddress.toString(),
+        totalSupply: totalSupply.toString(),
+        mintable: mintable.toString() === '-1',
+        adminAddress: adminAddress ? Address.parse(adminAddress).toString() : null,
+        metadata,
+        jettonWallet: jettonWalletAddress ? {
+          jWalletAddress: jettonWalletAddress.toString(),
+          balance: balance.toString()
+        } : null,
+        // Add getJettonDetails method for compatibility
+        getJettonDetails: async () => {
+          return this.getJettonDetails(minterAddress, ownerAddress, network)
+        }
       }
-
-      // If all parsing fails, create a simple cell with hash of the code
-      console.warn(`Creating simple cell for ${codeType} due to parsing failures`);
-      const hash = require('crypto').createHash('sha256').update(codeString).digest();
-      return beginCell()
-        .storeBuffer(hash.slice(0, 32)) // Store first 32 bytes of hash
-        .endCell();
 
     } catch (error) {
-      console.error(`Failed to convert ${codeType} to cell:`, error.message);
-      throw new Error(`Invalid ${codeType} format: ${error.message}`);
+      console.error('Failed to get jetton details:', error)
+      throw error
+    }
+  }
+
+  async mint(tonConnectUI, jettonAddress, amount, toAddress, network = 'testnet') {
+    try {
+      const mintMessage = mintBody(
+        Address.parse(toAddress),
+        amount,
+        toNano('0.05'),
+        0
+      )
+
+      const transaction = {
+        validUntil: Math.floor(Date.now() / 1000) + 60,
+        messages: [{
+          address: jettonAddress.toString(),
+          amount: toNano('0.05').toString(),
+          payload: mintMessage.toBoc().toString('base64')
+        }]
+      }
+
+      await tonConnectUI.sendTransaction(transaction)
+    } catch (error) {
+      console.error('Failed to mint tokens:', error)
+      throw error
+    }
+  }
+
+  async transfer(tonConnectUI, amount, toAddress, fromAddress, jettonWalletAddress, network = 'testnet') {
+    try {
+      const transferMessage = transfer(
+        Address.parse(toAddress),
+        amount,
+        toNano('0.05'),
+        0,
+        null
+      )
+
+      const transaction = {
+        validUntil: Math.floor(Date.now() / 1000) + 60,
+        messages: [{
+          address: jettonWalletAddress,
+          amount: toNano('0.05').toString(),
+          payload: transferMessage.toBoc().toString('base64')
+        }]
+      }
+
+      await tonConnectUI.sendTransaction(transaction)
+    } catch (error) {
+      console.error('Failed to transfer tokens:', error)
+      throw error
+    }
+  }
+
+  async burnJettons(tonConnectUI, amount, jettonAddress, fromAddress, network = 'testnet') {
+    try {
+      // First get the jetton wallet address
+      const jettonDetails = await this.getJettonDetails(
+        Address.parse(jettonAddress),
+        Address.parse(fromAddress),
+        network
+      )
+
+      if (!jettonDetails.jettonWallet) {
+        throw new Error('No jetton wallet found for this address')
+      }
+
+      const burnMessage = burn(
+        amount,
+        Address.parse(fromAddress),
+        null
+      )
+
+      const transaction = {
+        validUntil: Math.floor(Date.now() / 1000) + 60,
+        messages: [{
+          address: jettonDetails.jettonWallet.jWalletAddress,
+          amount: toNano('0.05').toString(),
+          payload: burnMessage.toBoc().toString('base64')
+        }]
+      }
+
+      await tonConnectUI.sendTransaction(transaction)
+    } catch (error) {
+      console.error('Failed to burn tokens:', error)
+      throw error
+    }
+  }
+
+  async updateMetadata(jettonAddress, metadata, tonConnectUI, fromAddress, network = 'testnet') {
+    try {
+      const metadataCell = buildJettonOnchainMetadata(metadata)
+      const updateMessage = updateMetadataBody(metadataCell)
+
+      const transaction = {
+        validUntil: Math.floor(Date.now() / 1000) + 60,
+        messages: [{
+          address: jettonAddress.toString(),
+          amount: toNano('0.05').toString(),
+          payload: updateMessage.toBoc().toString('base64')
+        }]
+      }
+
+      await tonConnectUI.sendTransaction(transaction)
+    } catch (error) {
+      console.error('Failed to update metadata:', error)
+      throw error
+    }
+  }
+
+  async changeAdmin(tonConnectUI, jettonAddress, newAdminAddress, fromAddress, network = 'testnet') {
+    try {
+      const changeAdminMessage = changeAdminBody(newAdminAddress)
+
+      const transaction = {
+        validUntil: Math.floor(Date.now() / 1000) + 60,
+        messages: [{
+          address: jettonAddress.toString(),
+          amount: toNano('0.05').toString(),
+          payload: changeAdminMessage.toBoc().toString('base64')
+        }]
+      }
+
+      await tonConnectUI.sendTransaction(transaction)
+    } catch (error) {
+      console.error('Failed to change admin:', error)
+      throw error
     }
   }
 
   async createJetton(params, tonConnectUI, ownerAddress, network = 'testnet') {
     try {
-      console.log('Creating jetton with user-generated dynamic contracts:', params)
-
-      // Check if we have pre-compiled contract codes or need to generate them
-      let minterCode, walletCode;
-      
-      if (params.minterCode && params.walletCode) {
-        // Use provided compiled codes
-        console.log('Using provided contract codes')
-        minterCode = params.minterCode;
-        walletCode = params.walletCode;
-      } else {
-        // Generate contracts from configuration
-        console.log('Generating contracts from configuration')
-        const { generateJettonMinter, generateJettonWallet } = await import('../../client/src/lib/contract-generator.js')
-        const minterSource = generateJettonMinter(params.config || params)
-        const walletSource = generateJettonWallet(params.config || params)
-        
-        // Compile the generated source code
-        const minterCompiled = await this.compileFuncCode(minterSource, 'minter')
-        const walletCompiled = await this.compileFuncCode(walletSource, 'wallet')
-        
-        minterCode = minterCompiled.code
-        walletCode = walletCompiled.code
-      }
+      console.log('Creating jetton with dynamic contracts:', params)
 
       const owner = Address.parse(ownerAddress)
-      const tokenConfig = params.config?.token || params.token
+      const tokenConfig = params.config?.token || params.token || params
 
-      // Build onchain metadata with user configuration
-      const metadataCell = buildJettonOnchainMetadata(tokenConfig)
+      // Check if we have the source code to compile
+      if (!params.minterCode || !params.walletCode) {
+        throw new Error('Dynamic contract source code is required for compilation.')
+      }
 
-      // Handle contract codes - they might be Cells already or need conversion
-      let minterCodeCell, walletCodeCell;
-      
-      if (minterCode instanceof Cell) {
-        minterCodeCell = minterCode;
-      } else if (typeof minterCode === 'string') {
-        minterCodeCell = this.convertCodeToCell(minterCode, 'minter code');
-      } else {
-        throw new Error('Invalid minter code format');
-      }
-      
-      if (walletCode instanceof Cell) {
-        walletCodeCell = walletCode;
-      } else if (typeof walletCode === 'string') {
-        walletCodeCell = this.convertCodeToCell(walletCode, 'wallet code');
-      } else {
-        throw new Error('Invalid wallet code format');
-      }
+      console.log('🔄 Compiling user-generated FunC contracts...')
+
+      // Compile both contracts
+      console.log('📝 Compiling minter contract...')
+      const minterCompileResult = await this.compileFuncCode(params.minterCode, 'minter')
+      console.log('📝 Compiling wallet contract...')
+      const walletCompileResult = await this.compileFuncCode(params.walletCode, 'wallet')
+
+      // Convert BOC to Cell objects
+      minterCodeCell = Cell.fromBoc(Buffer.from(minterCompileResult.codeBoc, 'base64'))[0]
+      walletCodeCell = Cell.fromBoc(Buffer.from(walletCompileResult.codeBoc, 'base64'))[0]
+
+      console.log('✅ Dynamic contracts compiled successfully')
+      console.log('Minter BOC length:', minterCompileResult.codeBoc.length)
+      console.log('Wallet BOC length:', walletCompileResult.codeBoc.length)
+
+      // Log first few characters of BOC for debugging
+      console.log('Minter BOC preview:', minterCompileResult.codeBoc.substring(0, 100) + '...')
+      console.log('Wallet BOC preview:', walletCompileResult.codeBoc.substring(0, 100) + '...')
+
+      console.log('Custom features:', {
+        transactionFee: params.config?.transactionFee || params.transactionFee,
+        buyback: params.config?.buyback || params.buyback
+      })
 
       // Create init data for minter with dynamic wallet code
       const minterData = initData(owner, tokenConfig, null, walletCodeCell)
-
-      console.log('✅ Using user-configured dynamic contracts')
-      console.log('Custom features:', params.customFeatures)
 
       // Deploy the user's custom contract
       const contractAddress = await this.deployer.deployContract({
@@ -247,7 +398,7 @@ slice calculate_jetton_wallet_address(slice owner_address, slice jetton_minter_a
         message: this.createDeployMessage(params)
       }, tonConnectUI)
 
-      console.log('User-configured contract deployed at:', contractAddress.toString())
+      console.log('🚀 Dynamic contract deployed at:', contractAddress.toString())
 
       return contractAddress
 

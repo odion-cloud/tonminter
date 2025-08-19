@@ -130,7 +130,7 @@ export const useContractStore = defineStore('contract', () => {
       // Generate contract code using client-side generator - NO SERVER FALLBACK
       const minterCode = generateJettonMinter(fullConfig.value)
       const walletCode = generateJettonWallet(fullConfig.value)
-      
+
       console.log('✅ Using ONLY user-configured dynamic contracts')
       console.log(`Minter contract features: ${JSON.stringify(fullConfig.value.token)}`)
       console.log(`Transaction fees: ${transactionFeeConfig.value.distributionType !== 'none' ? transactionFeeConfig.value.feePercentage + '%' : 'disabled'}`)
@@ -358,9 +358,23 @@ export const useContractStore = defineStore('contract', () => {
         userGenerated: true, // Flag to ensure no fallbacks
         customFeatures: compileResult.value.customFeatures
       }
-      
+
       console.log('🚀 Deploying user-configured dynamic contracts ONLY')
       console.log('Custom features:', deployConfig.customFeatures)
+
+      // Generate the contract source code
+      const minterSource = generateJettonMinter(deployConfig.config)
+      const walletSource = generateJettonWallet(deployConfig.config)
+
+      // Log generated source for debugging
+      console.log('Generated minter source:', minterSource.substring(0, 200) + '...')
+      console.log('Generated wallet source:', walletSource.substring(0, 200) + '...')
+
+      // Pass the generated source code for compilation
+      deployConfig.minterCode = minterSource
+      deployConfig.walletCode = walletSource
+
+      console.log('🔄 Sending dynamic contracts for FunC compilation...')
 
       const contractAddr = await jettonDeployController.createJetton(
         deployConfig,
@@ -394,14 +408,13 @@ export const useContractStore = defineStore('contract', () => {
       }
 
       // Get existing tokens for this wallet
-      const walletAddress = walletStore.getRawAddress()
-      const existingTokens = JSON.parse(localStorage.getItem(`tokens_${walletAddress}`) || '[]')
+      const existingTokens = JSON.parse(localStorage.getItem(`tokens_${walletStore.getRawAddress()}`) || '[]')
 
       // Add new token to the list
       existingTokens.push(deployedToken)
 
       // Store updated list
-      localStorage.setItem(`tokens_${walletAddress}`, JSON.stringify(existingTokens))
+      localStorage.setItem(`tokens_${walletStore.getRawAddress()}`, JSON.stringify(existingTokens))
 
       deployResult.value = {
         success: true,
